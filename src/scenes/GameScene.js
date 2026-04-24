@@ -1,6 +1,7 @@
 import Phaser from 'phaser'
 import Player from '../entities/Player.js'
 import Enemy from '../entities/Enemy.js'
+import NPC from '../entities/NPC.js'
 
 // World map layout: 0=grass, 1=path, 2=water, 3=decor, W=wall
 const TILE = 32 // rendered tile size (16px * 2 scale)
@@ -37,6 +38,10 @@ export default class GameScene extends Phaser.Scene {
     this.chests = this.physics.add.staticGroup()
     this.spawnChests()
 
+    // --- NPCs ---
+    this.npcs = this.physics.add.staticGroup()
+    this.spawnNPCs()
+
     // --- Collisions ---
     this.physics.add.collider(this.player, this.wallGroup)
     this.physics.add.collider(this.enemies, this.wallGroup)
@@ -56,6 +61,15 @@ export default class GameScene extends Phaser.Scene {
       this.player,
       this.chests,
       this.onChestOverlap,
+      null,
+      this
+    )
+
+    // NPC interaction proximity
+    this.physics.add.overlap(
+      this.player,
+      this.npcs,
+      this.onNPCProximity,
       null,
       this
     )
@@ -93,8 +107,16 @@ export default class GameScene extends Phaser.Scene {
     // Emit initial HP
     this.events.emit('playerHpChanged', this.player.hp, this.player.maxHp)
 
-    // UI notifications
-    this.uiNotifyText = null
+    // Track which NPC is currently in range
+    this._nearbyNPC = null
+    this._npcInRangeThisFrame = false
+
+    // NPC interact on E key
+    this.interactKey.on('down', () => {
+      if (this._nearbyNPC) {
+        this._nearbyNPC.interact(this)
+      }
+    })
   }
 
   buildWorld(worldW, worldH) {
@@ -110,20 +132,11 @@ export default class GameScene extends Phaser.Scene {
         const cell = this.getCell(col, row)
 
         if (cell === 'water') {
-          // Water tile (animated via tween)
-          const frame = Phaser.Math.Between(0, 5)
-          const t = this.add.image(wx, wy, 'water_tiles', frame)
+          // Animated water tile using water-sheet (30 frames, 16x48 each column)
+          const t = this.add.sprite(wx, wy, 'water_anim', 0)
             .setScale(2).setDepth(0)
+          t.play('water_anim')
           this.groundLayer.add(t)
-          // Gentle water shimmer
-          this.tweens.add({
-            targets: t,
-            alpha: 0.85,
-            duration: 1200 + Math.random() * 600,
-            yoyo: true,
-            repeat: -1,
-            delay: Math.random() * 1000
-          })
 
           // Invisible wall for water
           const wall = this.add.rectangle(wx, wy, TILE, TILE, 0x0000ff, 0)
@@ -140,13 +153,11 @@ export default class GameScene extends Phaser.Scene {
           // Grass - randomize between grass variants
           const r = Math.random()
           if (r < 0.7) {
-            // Use plains tileset green frames
             const frame = Phaser.Math.Between(0, 5)
             const t = this.add.image(wx, wy, 'plains', frame)
               .setScale(2).setDepth(0)
             this.groundLayer.add(t)
           } else {
-            // Single grass tile (tinted variants)
             const t = this.add.image(wx, wy, 'grass')
               .setScale(2).setDepth(0)
             this.groundLayer.add(t)
@@ -164,6 +175,26 @@ export default class GameScene extends Phaser.Scene {
           const wall = this.add.rectangle(wx, wy, TILE - 4, TILE - 4, 0x00ff00, 0)
           this.physics.add.existing(wall, true)
           this.wallGroup.add(wall)
+        }
+
+        // Fence decorations along path edges
+        if (cell === 'fence') {
+          const frame = Phaser.Math.Between(0, 3)
+          const f = this.add.image(wx, wy, 'fences', frame)
+            .setScale(2).setDepth(3)
+          this.decorLayer.add(f)
+          // Fence wall
+          const wall = this.add.rectangle(wx, wy, TILE - 8, TILE - 8, 0x888800, 0)
+          this.physics.add.existing(wall, true)
+          this.wallGroup.add(wall)
+        }
+
+        // Rock decorations in/near water
+        if (cell === 'rock_water') {
+          const frame = Phaser.Math.Between(0, 5)
+          const r = this.add.image(wx, wy, 'rock_in_water', frame)
+            .setScale(2).setDepth(1)
+          this.decorLayer.add(r)
         }
 
         // Border walls
@@ -185,9 +216,17 @@ export default class GameScene extends Phaser.Scene {
     // Small pond
     if (col >= 8 && col <= 12 && row >= 24 && row <= 28) return 'water'
 
+    // Rocks at water edges
+    if ((col === 31 || col === 45) && row >= 24 && row <= 34) return 'rock_water'
+    if ((col === 7 || col === 13) && row >= 24 && row <= 28) return 'rock_water'
+
     // Paths (horizontal + vertical crossing)
     if (row >= 8 && row <= 10 && col >= 2 && col <= WORLD_W - 2) return 'path'
     if (col >= 22 && col <= 24 && row >= 2 && row <= WORLD_H - 2) return 'path'
+
+    // Fences along top path edges
+    if ((row === 7 || row === 11) && col >= 3 && col <= 20 &&
+        (col * 3 + row) % 4 === 0) return 'fence'
 
     // Forest area (dense trees top-right)
     if (col >= 28 && col <= 46 && row >= 2 && row <= 16) {
@@ -235,25 +274,54 @@ export default class GameScene extends Phaser.Scene {
   }
 
   spawnChests() {
-    const chestPositions = [
+    // Chest_01 positions (standard gold chests)
+    const chest01Positions = [
       { x: 12, y: 5 },  // near start
       { x: 40, y: 15 }, // deep forest
       { x: 5, y: 20 },  // left side
-      { x: 26, y: 30 }, // south
-      { x: 48, y: 5 },  // far right
     ]
-
-    chestPositions.forEach(pos => {
+    chest01Positions.forEach(pos => {
       const cell = this.getCell(pos.x, pos.y)
       if (cell !== 'water' && cell !== 'wall' && cell !== 'tree') {
         const chest = this.add.sprite(pos.x * TILE + TILE / 2, pos.y * TILE + TILE / 2, 'chest', 0)
         chest.setScale(2)
         chest.setDepth(5)
         chest.opened = false
+        chest.chestType = 'chest_01'
         this.physics.add.existing(chest, true)
         this.chests.add(chest)
       }
     })
+
+    // Chest_02 positions (rare blue chests - bigger rewards)
+    const chest02Positions = [
+      { x: 26, y: 30 }, // south
+      { x: 48, y: 5 },  // far right
+    ]
+    chest02Positions.forEach(pos => {
+      const cell = this.getCell(pos.x, pos.y)
+      if (cell !== 'water' && cell !== 'wall' && cell !== 'tree') {
+        const chest = this.add.sprite(pos.x * TILE + TILE / 2, pos.y * TILE + TILE / 2, 'chest_02', 0)
+        chest.setScale(2)
+        chest.setDepth(5)
+        chest.opened = false
+        chest.chestType = 'chest_02'
+        this.physics.add.existing(chest, true)
+        this.chests.add(chest)
+      }
+    })
+  }
+
+  spawnNPCs() {
+    // Merchant near the start (safe area)
+    const merchant = new NPC(this, 9 * TILE + TILE / 2, 6 * TILE + TILE / 2, 'merchant')
+    this.npcs.add(merchant)
+    this._npcs = [merchant]
+
+    // Elder near the path crossing
+    const elder = new NPC(this, 22 * TILE + TILE / 2, 6 * TILE + TILE / 2, 'elder')
+    this.npcs.add(elder)
+    this._npcs.push(elder)
   }
 
   onPlayerAttackEnemy(hitbox, enemy) {
@@ -277,28 +345,43 @@ export default class GameScene extends Phaser.Scene {
       Phaser.Input.Keyboard.JustDown(this.attackKey)
     ) {
       chest.opened = true
-      chest.play('chest_open')
+      const animKey = chest.chestType === 'chest_02' ? 'chest_02_open' : 'chest_open'
+      chest.play(animKey)
 
-      // Random reward
-      const reward = Phaser.Math.Between(10, 40)
+      // Chest 02 gives bigger rewards
+      const isRare = chest.chestType === 'chest_02'
+      const reward = isRare ? Phaser.Math.Between(40, 80) : Phaser.Math.Between(10, 40)
+      const healAmt = isRare ? 50 : 20
       this.player.coins += reward
-      this.player.heal(20)
+      this.player.heal(healAmt)
       this.player.chestsOpened++
 
       // Camera flash - gold on chest open
       this.cameras.main.flash(300, 255, 215, 0, false)
 
       // Floating text reward
-      this.showFloatingText(chest.x, chest.y - 20, `+${reward} coins!`, '#ffd700')
-      this.showFloatingText(chest.x, chest.y - 40, '+20 HP', '#88ff88')
+      const label = isRare ? '★ RARE CHEST! ★' : 'Chest opened!'
+      this.showFloatingText(chest.x, chest.y - 20, `+${reward} coins!`, isRare ? '#00ccff' : '#ffd700')
+      this.showFloatingText(chest.x, chest.y - 40, `+${healAmt} HP`, '#88ff88')
 
       // Update UI
       const uiScene = this.scene.get('UI')
       if (uiScene) {
         uiScene.updateCoins(this.player.coins)
         uiScene.updateHp(this.player.hp, this.player.maxHp)
-        uiScene.notify(`Chest opened! +${reward} coins, +20 HP`)
+        uiScene.updateChests(this.player.chestsOpened)
+        uiScene.notify(`${label} +${reward} coins, +${healAmt} HP`)
       }
+    }
+  }
+
+  onNPCProximity(player, npc) {
+    // Mark NPC as nearby this frame
+    this._npcInRangeThisFrame = true
+    if (this._nearbyNPC !== npc) {
+      if (this._nearbyNPC) this._nearbyNPC.showHint(false)
+      this._nearbyNPC = npc
+      npc.showHint(true)
     }
   }
 
@@ -345,6 +428,11 @@ export default class GameScene extends Phaser.Scene {
   }
 
   returnToMenu() {
+    // Close any open NPC dialogue first
+    if (this._nearbyNPC && this._nearbyNPC.isDialogueOpen) {
+      this._nearbyNPC.closeDialogue()
+      return
+    }
     this.cameras.main.fadeOut(400, 0, 0, 0)
     this.cameras.main.once('camerafadeoutcomplete', () => {
       this.scene.stop('UI')
@@ -354,6 +442,9 @@ export default class GameScene extends Phaser.Scene {
 
   update(time, delta) {
     if (!this.player) return
+
+    // Reset NPC proximity tracking
+    this._npcInRangeThisFrame = false
 
     this.player.update(
       this.cursors,
@@ -367,6 +458,16 @@ export default class GameScene extends Phaser.Scene {
     this.enemies.getChildren().forEach(enemy => {
       if (enemy.active) enemy.update(this.player, time)
     })
+
+    // Clear NPC hint if player moved away
+    if (!this._npcInRangeThisFrame && this._nearbyNPC) {
+      this._nearbyNPC.showHint(false)
+      // Auto-close dialogue when player walks away
+      if (this._nearbyNPC.isDialogueOpen) {
+        this._nearbyNPC.closeDialogue()
+      }
+      this._nearbyNPC = null
+    }
 
     // Depth sort player vs objects
     this.player.setDepth(10 + this.player.y * 0.001)

@@ -59,6 +59,25 @@ export default class BootScene extends Phaser.Scene {
       frameHeight: 12
     })
 
+    // Additional assets
+    this.load.spritesheet('chest_02', 'assets/sprites/objects/chest_02.png', {
+      frameWidth: 16,
+      frameHeight: 16
+    })
+    this.load.spritesheet('fences', 'assets/sprites/tilesets/fences.png', {
+      frameWidth: 16,
+      frameHeight: 16
+    })
+    this.load.spritesheet('water_anim', 'assets/sprites/tilesets/water-sheet.png', {
+      frameWidth: 16,
+      frameHeight: 48
+    })
+    this.load.spritesheet('rock_in_water', 'assets/sprites/objects/rock_in_water-sheet.png', {
+      frameWidth: 16,
+      frameHeight: 16
+    })
+    this.load.image('wooden_door', 'assets/sprites/tilesets/walls/wooden_door.png')
+
     // Loading bar
     const width = this.cameras.main.width
     const height = this.cameras.main.height
@@ -237,6 +256,22 @@ export default class BootScene extends Phaser.Scene {
       frames: this.anims.generateFrameNumbers('dust', { start: 0, end: 2 }),
       frameRate: 10,
       repeat: 0
+    })
+
+    // Chest 02 (64x16 = 4 frames at 16x16)
+    this.anims.create({
+      key: 'chest_02_open',
+      frames: this.anims.generateFrameNumbers('chest_02', { start: 0, end: 3 }),
+      frameRate: 8,
+      repeat: 0
+    })
+
+    // Animated water (480x48, 30 columns x 1 row at 16x48 each column = 30 frames)
+    this.anims.create({
+      key: 'water_anim',
+      frames: this.anims.generateFrameNumbers('water_anim', { start: 0, end: 29 }),
+      frameRate: 8,
+      repeat: -1
     })
   }
 }

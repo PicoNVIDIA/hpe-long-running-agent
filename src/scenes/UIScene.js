@@ -8,6 +8,7 @@ export default class UIScene extends Phaser.Scene {
   create() {
     this.scale.on('resize', this.onResize, this)
     this.buildUI()
+    this.buildMinimap()
   }
 
   buildUI() {
@@ -64,7 +65,7 @@ export default class UIScene extends Phaser.Scene {
 
     // ---- Controls hint (bottom) ----
     const hint = this.add.text(width / 2, height - 10,
-      'WASD/Arrows: Move  |  Shift: Sprint  |  Space/E: Attack/Interact  |  Esc: Menu',
+      'WASD/Arrows: Move  |  Shift: Sprint  |  Space: Attack  |  E: Interact/Talk  |  Esc: Menu',
       {
         fontFamily: 'monospace',
         fontSize: '10px',
@@ -197,5 +198,103 @@ export default class UIScene extends Phaser.Scene {
     if (this.notifText) {
       this.notifText.setPosition(gameSize.width / 2, gameSize.height - 30)
     }
+  }
+
+  buildMinimap() {
+    // Minimap constants (must match GameScene world)
+    const WORLD_W = 50
+    const WORLD_H = 38
+    const MAP_W = 100
+    const MAP_H = 76
+    const { width, height } = this.scale
+
+    const mx = width - MAP_W - 10
+    const my = 10
+
+    // Minimap background
+    const mapBg = this.add.graphics()
+    mapBg.fillStyle(0x000000, 0.7)
+    mapBg.fillRect(mx - 2, my - 2, MAP_W + 4, MAP_H + 4)
+    mapBg.lineStyle(1, 0x446644, 1)
+    mapBg.strokeRect(mx - 2, my - 2, MAP_W + 4, MAP_H + 4)
+
+    // Draw simplified world (water = blue, tree = dark green, path = tan)
+    const mapGfx = this.add.graphics()
+    const CELL_W = MAP_W / WORLD_W
+    const CELL_H = MAP_H / WORLD_H
+
+    for (let row = 0; row < WORLD_H; row++) {
+      for (let col = 0; col < WORLD_W; col++) {
+        const cell = this._minimapGetCell(col, row, WORLD_W, WORLD_H)
+        let color = 0x2a5c2a // grass
+        if (cell === 'water') color = 0x1a3a8c
+        else if (cell === 'tree') color = 0x0f3010
+        else if (cell === 'path') color = 0x8a7a5a
+        else if (cell === 'fence') color = 0x7a6a3a
+        else if (cell === 'wall') color = 0x111111
+        mapGfx.fillStyle(color, 1)
+        mapGfx.fillRect(mx + col * CELL_W, my + row * CELL_H, CELL_W + 0.5, CELL_H + 0.5)
+      }
+    }
+
+    // NPC markers (yellow/blue dots)
+    const npcPositions = [
+      { x: 9, y: 6, color: 0xffd700 },  // merchant
+      { x: 22, y: 6, color: 0xaaddff }, // elder
+    ]
+    npcPositions.forEach(npc => {
+      mapGfx.fillStyle(npc.color, 1)
+      mapGfx.fillRect(mx + npc.x * CELL_W - 1, my + npc.y * CELL_H - 1, 3, 3)
+    })
+
+    // Player dot (bright green, updated each frame)
+    this._mapGfx = mapGfx
+    this._mapMx = mx
+    this._mapMy = my
+    this._mapCellW = CELL_W
+    this._mapCellH = CELL_H
+    this._mapTILE = 32
+
+    this._playerDot = this.add.graphics()
+    this._playerDot.fillStyle(0x00ff44, 1)
+    this._playerDot.fillRect(0, 0, 3, 3)
+    this._playerDot.setDepth(50)
+  }
+
+  _minimapGetCell(col, row, WORLD_W, WORLD_H) {
+    if (col === 0 || col === WORLD_W - 1 || row === 0 || row === WORLD_H - 1) return 'wall'
+    if (col >= 32 && col <= 44 && row >= 24 && row <= 34) return 'water'
+    if (col >= 8 && col <= 12 && row >= 24 && row <= 28) return 'water'
+    if ((col === 31 || col === 45) && row >= 24 && row <= 34) return 'rock_water'
+    if (row >= 8 && row <= 10 && col >= 2 && col <= WORLD_W - 2) return 'path'
+    if (col >= 22 && col <= 24 && row >= 2 && row <= WORLD_H - 2) return 'path'
+    if ((row === 7 || row === 11) && col >= 3 && col <= 20 && (col * 3 + row) % 4 === 0) return 'fence'
+    if (col >= 28 && col <= 46 && row >= 2 && row <= 16) {
+      if (Math.abs((col * 7 + row * 13) % 3) === 0) return 'tree'
+    }
+    const hash = (col * 17 + row * 31) % 100
+    if (hash < 8 && col > 3 && row > 3 && col < WORLD_W - 3 && row < WORLD_H - 3) return 'tree'
+    return 'grass'
+  }
+
+  update() {
+    // Update player dot on minimap
+    if (!this._playerDot) return
+    const gameScene = this.scene.get('Game')
+    if (!gameScene || !gameScene.player) return
+
+    const px = gameScene.player.x
+    const py = gameScene.player.y
+    const TILE = this._mapTILE
+    const WORLD_W = 50
+    const WORLD_H = 38
+    const col = px / TILE
+    const row = py / TILE
+    const dotX = this._mapMx + col * this._mapCellW - 1.5
+    const dotY = this._mapMy + row * this._mapCellH - 1.5
+
+    this._playerDot.clear()
+    this._playerDot.fillStyle(0x00ff44, 1)
+    this._playerDot.fillCircle(dotX + 1.5, dotY + 1.5, 2.5)
   }
 }
