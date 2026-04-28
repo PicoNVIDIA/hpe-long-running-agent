@@ -96,7 +96,7 @@ export default class GameScene extends Phaser.Scene {
     // --- Events ---
     this.events.on('playerHpChanged', (hp, maxHp) => {
       const uiScene = this.scene.get('UI')
-      if (uiScene) uiScene.updateHp(hp, maxHp)
+      if (uiScene && uiScene.hpBar) uiScene.updateHp(hp, maxHp)
     })
     this.events.on('playerDied', () => this.onPlayerDied())
     this.events.on('enemyKilled', (x, y, type) => this.onEnemyKilled(x, y, type))
@@ -104,10 +104,10 @@ export default class GameScene extends Phaser.Scene {
     // ESC = back to menu
     this.escKey.on('down', () => this.returnToMenu())
 
-    // Emit initial HP once UIScene is ready
-    this.scene.get('UI')
-      ? this.events.emit('playerHpChanged', this.player.hp, this.player.maxHp)
-      : this.time.delayedCall(100, () => this.events.emit('playerHpChanged', this.player.hp, this.player.maxHp))
+    // Emit initial HP after UIScene has had time to create its graphics
+    this.time.delayedCall(200, () => {
+      this.events.emit('playerHpChanged', this.player.hp, this.player.maxHp)
+    })
 
     // Track which NPC is currently in range
     this._nearbyNPC = null
