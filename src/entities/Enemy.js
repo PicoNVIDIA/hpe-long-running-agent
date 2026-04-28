@@ -1,4 +1,3 @@
-import Phaser from 'phaser'
 
 export default class Enemy extends Phaser.Physics.Arcade.Sprite {
   constructor(scene, x, y, type = 'skeleton') {
