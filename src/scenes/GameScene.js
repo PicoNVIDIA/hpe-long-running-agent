@@ -104,11 +104,6 @@ export default class GameScene extends Phaser.Scene {
     // ESC = back to menu
     this.escKey.on('down', () => this.returnToMenu())
 
-    // Emit initial HP after UIScene has had time to create its graphics
-    this.time.delayedCall(200, () => {
-      this.events.emit('playerHpChanged', this.player.hp, this.player.maxHp)
-    })
-
     // Track which NPC is currently in range
     this._nearbyNPC = null
     this._npcInRangeThisFrame = false
