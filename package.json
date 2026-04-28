@@ -6,5 +6,9 @@
   "scripts": {
     "dev": "node server.js",
     "start": "node server.js"
+  },
+  "dependencies": {
+    "phaser": "^3.87.0"
   }
+}
 }
