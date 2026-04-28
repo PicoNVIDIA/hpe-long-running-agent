@@ -1,4 +1,4 @@
-import Phaser from 'phaser'
+import * as Phaser from 'phaser'
 import Player from '../entities/Player.js'
 import Enemy from '../entities/Enemy.js'
 import NPC from '../entities/NPC.js'
