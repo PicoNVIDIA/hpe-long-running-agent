@@ -4,7 +4,7 @@
   "description": "A 2D exploration RPG built with Phaser 3 and Mystic Woods assets",
   "type": "module",
   "scripts": {
-    "dev": "npx --yes serve -l 5173 .",
-    "start": "npx --yes serve -l 5173 ."
+    "dev": "node server.js",
+    "start": "node server.js"
   }
 }

@@ -9,6 +9,11 @@ export default class UIScene extends Phaser.Scene {
     this.scale.on('resize', this.onResize, this)
     this.buildUI()
     this.buildMinimap()
+    // Sync initial HP from GameScene once UI is ready
+    const gameScene = this.scene.get('Game')
+    if (gameScene && gameScene.player) {
+      this.updateHp(gameScene.player.hp, gameScene.player.maxHp)
+    }
   }
 
   buildUI() {
