@@ -145,6 +145,7 @@ export default class UIScene extends Phaser.Scene {
   }
 
   updateHp(hp, maxHp) {
+    if (!this.hpBar) return
     const pct = Math.max(0, hp / maxHp)
     this.hpBar.clear()
 
@@ -160,14 +161,17 @@ export default class UIScene extends Phaser.Scene {
   }
 
   updateCoins(coins) {
+    if (!this.coinsText) return
     this.coinsText.setText(`🪙 ${coins}`)
   }
 
   updateKills(kills) {
+    if (!this.killsText) return
     this.killsText.setText(`⚔ ${kills}`)
   }
 
   updateChests(chests) {
+    if (!this.chestsText) return
     this.chestsText.setText(`📦 ${chests}`)
   }
 
