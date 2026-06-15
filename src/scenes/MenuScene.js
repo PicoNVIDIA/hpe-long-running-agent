@@ -39,7 +39,7 @@ export default class MenuScene extends Phaser.Scene {
       fontFamily: 'monospace',
       fontSize: '36px',
       fontStyle: 'bold',
-      fill: '#c8f0c8',
+      fill: '#FFD700',
       stroke: '#1a3a1a',
       strokeThickness: 4,
       shadow: { offsetX: 2, offsetY: 2, color: '#000', blur: 4, fill: true }
